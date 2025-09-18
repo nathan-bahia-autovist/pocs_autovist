@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Seleção Inteligente de Câmera</title>
+    <style>
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            background-color: #000; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+        }
+
+        /* Camada de Vídeo */
+        #video-container { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background-color: #111; 
+            display: none;
+        }
+        #videoPlayer { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover;
+        }
+
+        /* Camada de UI (Controles) */
+        #ui-layer { 
+            position: fixed; 
+            bottom: 0; 
+            left: 0; 
+            width: 100%; 
+            z-index: 10; 
+            display: none;
+        }
+        #controls { 
+            padding: 15px 20px;
+            box-sizing: border-box; 
+            display: flex; 
+            justify-content: space-between; /* Mantém espaço entre os itens */
+            align-items: center; 
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); 
+            min-height: 90px;
+        }
+        #captureButton { 
+            width: 65px;
+            height: 65px;
+            border-radius: 50%; 
+            border: 4px solid white;
+            background-color: transparent;
+            cursor: pointer; 
+            transition: background-color 0.2s ease;
+            /* ALTERADO: Removido margin-right para deixar o flexbox controlar */
+        }
+        #captureButton:active { 
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Estilos para o botão de engrenagem e menu de câmera */
+        #settingsButton {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 0;
+            /* ALTERADO: Removido margin-left para deixar o flexbox controlar */
+        }
+        #settingsButton:focus {
+            outline: none;
+        }
+        /* ALTERADO: Posição do menu ajustada para o lado esquerdo */
+        #cameraSelectContainer {
+            position: absolute;
+            bottom: 85px;
+            left: 20px; 
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            padding: 10px;
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 200px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        #cameraSelect { 
+            background-color: rgba(255,255,255,0.1);
+            color: white; 
+            border: 1px solid #888; 
+            border-radius: 6px; 
+            padding: 8px; 
+            font-size: 14px; 
+            width: 100%; 
+            box-sizing: border-box;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22M287%2C197.971L159.028%2C69.999c-3.613-3.613-7.85-5.421-12.722-5.421s-9.109%2C1.808-12.722%2C5.421L5.421%2C197.971c-3.613%2C3.613-5.421%2C7.85-5.421%2C12.722s1.808%2C9.109%2C5.421%2C12.722L146.206%2C335.85c3.613%2C3.613%2C7.85%2C5.421%2C12.722%2C5.421s9.109%2C-1.808%2C12.722%2C-5.421l140.784%2C-112.435c3.613%2C-3.613%2C5.421%2C-7.85%2C5.421%2C-12.722S290.613%2C201.584%2C287%2C197.971z%22%2F%3E%3C%2Fsvg%3E');
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            background-size: 10px;
+        }
+
+
+        /* Tela de Permissão */
+        #permission-layer { 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            width: 100%; 
+            height: 100%; 
+            z-index: 20; 
+            color: white; 
+            text-align: center; 
+        }
+        #permission-layer h1 { 
+            font-size: 24px; 
+            margin-bottom: 10px; 
+        }
+        #permission-layer p { 
+            font-size: 16px; 
+            max-width: 80%; 
+            color: #ccc; 
+            line-height: 1.5;
+        }
+        #activateButton { 
+            font-size: 18px; 
+            font-weight: bold; 
+            color: white; 
+            background-color: #007aff; 
+            border: none; 
+            padding: 15px 30px; 
+            border-radius: 12px; 
+            cursor: pointer; 
+            margin-top: 20px; 
+        }
+
+        /* Tela de Carregamento */
+        #loading-layer {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 30;
+            color: white;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #007aff;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #loading-message {
+            font-size: 16px;
+            max-width: 80%;
+            text-align: center;
+        }
+        
+        #photoCanvas { display: none; }
+    </style>
+</head>
+<body>
+    <div id="permission-layer">
+        <h1>Câmera de Alta Precisão</h1>
+        <p>Vamos identificar automaticamente sua melhor câmera traseira para fotos de alta qualidade.</p>
+        <button id="activateButton">Ativar Câmera</button>
+    </div>
+
+    <div id="loading-layer">
+        <div class="spinner"></div>
+        <div id="loading-message">Preparando sua câmera...</div>
+    </div>
+
+    <div id="video-container">
+        <video id="videoPlayer" autoplay playsinline></video>
+    </div>
+
+    <div id="ui-layer">
+        <div id="controls">
+            <button id="settingsButton" title="Configurações da Câmera">⚙️</button> 
+            <button id="captureButton" title="Tirar Foto"></button>
+        </div>
+        
+        <div id="cameraSelectContainer">
+            <label for="cameraSelect" style="color: white; font-size: 14px; margin-bottom: 5px;">Selecionar Câmera:</label>
+            <select id="cameraSelect"></select>
+        </div>
+    </div>
+
+    <canvas id="photoCanvas"></canvas>
+
+    <script>
+        // Referências aos elementos da UI
+        const permissionLayer = document.getElementById('permission-layer');
+        const activateButton = document.getElementById('activateButton');
+        const loadingLayer = document.getElementById('loading-layer');
+        const loadingMessage = document.getElementById('loading-message');
+        const videoContainer = document.getElementById('video-container');
+        const uiLayer = document.getElementById('ui-layer');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const captureButton = document.getElementById('captureButton');
+        const settingsButton = document.getElementById('settingsButton');
+        const cameraSelectContainer = document.getElementById('cameraSelectContainer');
+        const cameraSelect = document.getElementById('cameraSelect');
+        const photoCanvas = document.getElementById('photoCanvas');
+        
+        let activeStream;
+        let availableCameras = [];
+        let isSettingsMenuOpen = false;
+
+        // Event Listeners
+        activateButton.addEventListener('click', startCameraProcess);
+        captureButton.addEventListener('click', takePicture);
+        cameraSelect.addEventListener('change', () => switchCamera(cameraSelect.value));
+        settingsButton.addEventListener('click', toggleSettingsMenu);
+
+        function toggleSettingsMenu() {
+            isSettingsMenuOpen = !isSettingsMenuOpen;
+            cameraSelectContainer.style.display = isSettingsMenuOpen ? 'flex' : 'none';
+        }
+
+        // Iniciar o processo de câmera
+        async function startCameraProcess() {
+            permissionLayer.style.display = 'none';
+            loadingLayer.style.display = 'flex';
+            
+            try {
+                // Obter permissão inicial
+                loadingMessage.textContent = "Obtendo permissão...";
+                const initialStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                initialStream.getTracks().forEach(track => track.stop());
+                
+                // Descobrir e testar câmeras em background
+                loadingMessage.textContent = "Analisando câmeras disponíveis...";
+                await discoverCameras();
+                
+                // Selecionar a melhor câmera
+                loadingMessage.textContent = "Selecionando a melhor câmera...";
+                const bestCamera = selectBestCamera();
+                
+                if (!bestCamera) {
+                    throw new Error("Nenhuma câmera adequada foi encontrada.");
+                }
+                
+                // Iniciar a câmera selecionada
+                await switchCamera(bestCamera.deviceId);
+                
+                // Esconder loading e mostrar a interface
+                loadingLayer.style.display = 'none';
+                videoContainer.style.display = 'block';
+                uiLayer.style.display = 'block';
+
+                screen.orientation.addEventListener('change', handleOrientationChange);
+                handleOrientationChange(); // Verifica a orientação inicial
+                
+            } catch (error) {
+                console.error("Erro no processo de câmera:", error);
+                loadingLayer.style.display = 'none';
+                permissionLayer.style.display = 'flex';
+                
+                if (error.name === "NotAllowedError") {
+                    alert("Permissão de câmera negada. Por favor, permita o acesso à câmera para usar este aplicativo.");
+                } else {
+                    alert("Erro ao acessar a câmera: " + error.message);
+                }
+            }
+        }
+
+        // Descobrir e testar câmeras disponíveis
+        async function discoverCameras() {
+            availableCameras = [];
+            
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                
+                if (videoDevices.length === 0) {
+                    throw new Error("Nenhuma câmera encontrada.");
+                }
+                
+                for (const device of videoDevices) {
+                    try {
+                        loadingMessage.textContent = `Testando câmera: ${device.label || 'Dispositivo sem nome'}...`;
+                        
+                        // ALTERADO: Pedir resolução Full HD para melhor desempenho
+                        const stream = await navigator.mediaDevices.getUserMedia({
+                            video: {
+                                deviceId: { exact: device.deviceId },
+                                width: { ideal: 1920 }, // Prioriza Full HD
+                                height: { ideal: 1080 }, // Prioriza Full HD
+                            }
+                        });
+                        
+                        const track = stream.getVideoTracks()[0];
+                        const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+                        const settings = track.getSettings();
+                        
+                        const qualityScore = calculateCameraQuality(settings, capabilities, device.label);
+                        
+                        availableCameras.push({
+                            deviceId: device.deviceId,
+                            label: device.label || `Câmera ${availableCameras.length + 1}`,
+                            settings: settings,
+                            capabilities: capabilities,
+                            qualityScore: qualityScore,
+                            isPrimary: isPrimaryCamera(device.label, settings)
+                        });
+                        
+                        track.stop();
+                    } catch (error) {
+                        console.warn(`Não foi possível testar a câmera: ${device.label}`, error);
+                    }
+                }
+                
+                if (availableCameras.length === 0) {
+                    throw new Error("Nenhuma câmera pôde ser acessada.");
+                }
+                
+            } catch (error) {
+                console.error("Erro ao descobrir câmeras:", error);
+                throw error;
+            }
+        }
+
+        // Calcular qualidade da câmera
+        function calculateCameraQuality(settings, capabilities, label) {
+            let score = 0;
+            const megapixels = (settings.width * settings.height) / 1000000;
+            score += megapixels * 0.7; // Aumentado peso da resolução
+            
+            if (settings.frameRate) {
+                score += Math.min(settings.frameRate, 30) * 0.3; // Diminuído peso do framerate
+            }
+            
+            const isRearCamera = /back|rear|traseira|environment/gi.test(label);
+            if (isRearCamera) {
+                score += 50; // Aumentado bônus por ser traseira
+            }
+            
+            if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                score += 15;
+            }
+            
+            return score;
+        }
+
+        // Identificar câmera principal
+        function isPrimaryCamera(label, settings) {
+            const isAuxiliary = /wide|ultra|tele|panoramic|auxiliary|tof|depth/gi.test(label);
+            if (isAuxiliary) return false;
+            
+            const isRearCamera = /back|rear|traseira|environment/gi.test(label);
+            if (!isRearCamera) return false;
+            
+            const megapixels = (settings.width * settings.height) / 1000000;
+            if (megapixels < 5) return false;
+            
+            return true;
+        }
+
+        // Selecionar a melhor câmera
+        function selectBestCamera() {
+            if (availableCameras.length === 0) return null;
+            
+            availableCameras.sort((a, b) => {
+                if (a.isPrimary && !b.isPrimary) return -1;
+                if (!a.isPrimary && b.isPrimary) return 1;
+                return b.qualityScore - a.qualityScore;
+            });
+            
+            return availableCameras[0];
+        }
+
+        // Popular seletor de câmeras
+        function populateCameraSelector() {
+            cameraSelect.innerHTML = '';
+            
+            if (availableCameras.length <= 1) {
+                cameraSelectContainer.style.display = 'none';
+                settingsButton.style.display = 'none';
+                return;
+            }
+            
+            settingsButton.style.display = 'block';
+            
+            availableCameras.forEach(camera => {
+                const option = document.createElement('option');
+                option.value = camera.deviceId;
+                
+                const mp = ((camera.settings.width * camera.settings.height) / 1000000).toFixed(1);
+                let label = camera.label;
+                if (label.length > 25) label = label.substring(0, 22) + '...';
+                
+                option.textContent = `${label} (${mp} MP)`;
+                
+                if (camera.isPrimary) {
+                    option.textContent += ' - Principal';
+                }
+                
+                cameraSelect.appendChild(option);
+            });
+        }
+
+        // Alternar entre câmeras
+        async function switchCamera(deviceId) {
+            if (activeStream) {
+                activeStream.getTracks().forEach(track => track.stop());
+            }
+            
+            try {
+                // ALTERADO: Usar a mesma restrição de Full HD para mais leveza
+                activeStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        deviceId: { exact: deviceId },
+                        width: { ideal: 3840 },
+                        height: { ideal: 2160 }
+                    }
+                });
+                
+                videoPlayer.srcObject = activeStream;
+                cameraSelect.value = deviceId;
+                populateCameraSelector();
+                
+                const track = activeStream.getVideoTracks()[0];
+                if (track.getCapabilities && track.getCapabilities().focusMode) {
+                    track.applyConstraints({
+                        advanced: [{ focusMode: 'continuous' }]
+                    }).catch(e => console.warn("Não foi possível aplicar focusMode contínuo:", e));
+                }
+
+            } catch (error) {
+                console.error("Erro ao alternar câmera:", error);
+                
+                const currentIndex = availableCameras.findIndex(cam => cam.deviceId === deviceId);
+                if (currentIndex !== -1 && currentIndex + 1 < availableCameras.length) {
+                    await switchCamera(availableCameras[currentIndex + 1].deviceId);
+                } else {
+                    alert("Não foi possível iniciar a câmera selecionada.");
+                }
+            }
+        }
+
+        // Tirar foto
+        function takePicture() {
+            if (!activeStream) return;
+            
+            const context = photoCanvas.getContext('2d');
+            const videoWidth = videoPlayer.videoWidth;
+            const videoHeight = videoPlayer.videoHeight;
+
+            photoCanvas.width = videoWidth;
+            photoCanvas.height = videoHeight;
+            context.drawImage(videoPlayer, 0, 0, videoWidth, videoHeight);
+            
+            const imageDataUrl = photoCanvas.toDataURL('image/jpeg', 0.98);
+            
+            const link = document.createElement('a');
+            link.href = imageDataUrl;
+            const timestamp = new Date().toISOString().replace(/[-:.]/g, '');
+            link.download = `foto_${timestamp}_${videoWidth}x${videoHeight}.jpg`;
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Função para gerenciar a tela cheia baseada na orientação
+        function handleOrientationChange() {
+            const orientation = screen.orientation.type;
+            
+            if (orientation.startsWith('landscape')) {
+                if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        console.error(`Erro ao tentar entrar em tela cheia: ${err.message} (${err.name})`);
+                    });
+                }
+            } else if (orientation.startsWith('portrait')) {
+                if (document.exitFullscreen && document.fullscreenElement) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
