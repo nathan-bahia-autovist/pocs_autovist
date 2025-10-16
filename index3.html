@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body {
+            padding: 2rem;
+        }
+
+        h1, p {
+            font-family: Arial, sans-serif;
+            margin-top: 2rem;
+        }
+
+        code {
+            background-color: #484848;
+            color: #fafafa;
+            padding: 1rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Assinatura HMAC-SHA256</h1>
+
+        <p>Chave secreta</p>
+        <code id="secretKey"></code>
+        
+        <p>Mensagem</p>
+        <code id="message"></code>
+
+        <p>Assinatura</p>
+        <code id="signature"></code>
+    </main>
+
+    <script>
+
+            function arrayBufferToHex(buffer) {
+                return Array.from(new Uint8Array(buffer))
+                    .map((b) => b.toString(16).padStart(2, "0"))
+                    .join("");
+            }
+
+            async function generateHmacSha256(secretKey, message) {
+                const encoder = new TextEncoder();
+                const keyData = encoder.encode(secretKey);
+                const messageData = encoder.encode(message);
+
+                const subtle = (window.crypto || window.msCrypto).subtle; // fallback
+                if (!subtle) {
+                throw new Error("Web Crypto API não disponível neste navegador ou contexto inseguro.");
+                }
+
+                const key = await subtle.importKey(
+                "raw",
+                keyData,
+                { name: "HMAC", hash: "SHA-256" },
+                false,
+                ["sign"]
+                );
+
+                const signatureBuffer = await subtle.sign("HMAC", key, messageData);
+                return arrayBufferToHex(signatureBuffer);
+            }
+
+            function getCoords() {
+                return new Promise((resolve) => {
+                    if (!navigator.geolocation) {
+                        resolve({ latitude: null, longitude: null, err_code: 1 });
+                        return;
+                    }
+
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            resolve({
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            err_code: null,
+                            });
+                        },
+                        (error) => {
+                            let err_code = 2;
+                            if (error.code === error.POSITION_UNAVAILABLE) {
+                            err_code = 3;
+                            } else if (error.code === error.TIMEOUT) {
+                            err_code = 4;
+                            }
+                            resolve({ latitude: null, longitude: null, err_code });
+                        },
+                        { timeout: 10000 },
+                    );
+                });
+            }
+
+            function getInspectionHash() {
+                return 'nathanBahia'
+            }
+
+            
+            (async () => {
+                const coords = await getCoords();
+    
+                const geolocationPayload = {
+                    latitude: coords.latitude ? String(coords.latitude) : null,
+                    longitude: coords.longitude ? String(coords.longitude) : null,
+                    err_code: coords.err_code ? String(coords.err_code) : null,
+                };
+    
+                const payload = {
+                    captured_at: new Date().toISOString(),
+                }
+
+                const secretKey = getInspectionHash();
+                const message = `autovist-${geolocationPayload.latitude}-${geolocationPayload.longitude}-${geolocationPayload.err_code}-${payload.captured_at}`;
+                const signature = await generateHmacSha256(secretKey, message);
+    
+                document.getElementById(`secretKey`).innerHTML = secretKey;
+                document.getElementById(`message`).innerHTML = message;
+                document.getElementById(`signature`).innerHTML = signature;
+            })()
+    </script>
+</body>
+</html>
