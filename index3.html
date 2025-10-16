@@ -37,6 +37,11 @@
     </main>
 
     <script>
+            const geolocationErrorCodeMap = {
+                [1]: "PERMISSION_DENIED",
+                [2]: "POSITION_UNAVAILABLE",
+                [3]: "TIMEOUT",
+            }
 
             function arrayBufferToHex(buffer) {
                 return Array.from(new Uint8Array(buffer))
@@ -76,19 +81,17 @@
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
                             resolve({
-                            latitude: position.coords.latitude,
-                            longitude: position.coords.longitude,
-                            err_code: null,
+                                latitude: position.coords.latitude,
+                                longitude: position.coords.longitude,
+                                err_code: null,
                             });
                         },
                         (error) => {
-                            let err_code = 2;
-                            if (error.code === error.POSITION_UNAVAILABLE) {
-                            err_code = 3;
-                            } else if (error.code === error.TIMEOUT) {
-                            err_code = 4;
-                            }
-                            resolve({ latitude: null, longitude: null, err_code });
+                            resolve({ 
+                                latitude: null, 
+                                longitude: null, 
+                                err_code: geolocationErrorCodeMap[error.code] || "UNKNOWN_ERROR",
+                            });
                         },
                         { timeout: 10000 },
                     );
